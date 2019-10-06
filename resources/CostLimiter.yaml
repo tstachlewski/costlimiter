@@ -1,0 +1,120 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: 'AWS::Serverless-2016-10-31'
+Description: 'Cost Limiter Solution'
+
+Parameters:
+
+  Budget:
+    Type: String
+    Default: 10
+    Description: Max $ spent, after which resources should be stopped.
+
+  Email:
+    Type: String
+    Description: Email address to which information will be send.
+
+Resources:
+
+  StopperPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    DeletionPolicy: Retain
+    Properties:
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          -
+            Effect: "Deny"
+            Action:
+              - "rds:StartDBCluster"
+              - "rds:CreateDBCluster"
+              - "rds:CreateDBInstance"
+              - "rds:StartDBInstance"
+              - "ec2:RunInstances"
+              - "ec2:StartInstances"
+              - "ec2:UpdateScalingPlan"
+              - "ec2:CreateScalingPlan"
+              - "redshift:CreateCluster"
+              - "sagemaker:StartNotebookInstance"
+              - "sagemaker:CreateNotebookInstance"
+            Resource: "*"
+
+
+  CostLimiterLogicLambdaRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: "sts:AssumeRole"
+      Policies:
+        - PolicyName: CostLimiterPolicies
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'iam:AttachUserPolicy'
+                  - 'iam:ListUsers'
+                  - 'sagemaker:ListNotebookInstances'
+                  - 'sagemaker:StopNotebookInstance'
+                  - 'redshift:DescribeClusters'
+                  - 'redshift:DeleteCluster'
+                  - 'rds:DescribeDBInstances'
+                  - 'rds:DescribeDBClusters'
+                  - 'rds:StopDBCluster'
+                  - 'rds:StopDBInstance'
+                  - 'autoscaling:DescribeAutoScalingGroups'
+                  - 'autoscaling:UpdateAutoScalingGroup'
+                  - 'ec2:DescribeInstances'
+                  - 'ec2:StopInstances'
+                  - "ec2:DescribeRegions"
+                Resource: "*"
+
+
+  CostLimiterLogicLambda:
+    Type: "AWS::Serverless::Function"
+    Properties:
+      Handler: "lambda_function.handler"
+      Role: !GetAtt CostLimiterLogicLambdaRole.Arn
+      CodeUri: s3://cost-limiter/costlimiter.zip
+      Runtime: "python3.7"
+      MemorySize: 128
+      Timeout: 900
+      Environment:
+        Variables:
+          STOPPER_POLICY: !Ref StopperPolicy
+      Events:
+        SNS:
+          Type: SNS
+          Properties:
+            Topic: !Ref CostLimiterTopic
+
+  CostLimiterTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: "CostLimiter"
+      Subscription:
+        - Endpoint: !Ref Email
+          Protocol: "email"
+
+
+  CostLimiterAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmActions:
+        - !Ref CostLimiterTopic
+      AlarmDescription: !Join [ "", [ "Account Billing Alert for ", Ref: Budget ] ]
+      AlarmName: !Join [ "", [ "Billing Alert - Estimated Bill Exceeds $", Ref: Budget ] ]
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: Currency
+          Value: USD
+      EvaluationPeriods: 1
+      MetricName: EstimatedCharges
+      Namespace: AWS/Billing
+      Period: 21600
+      Statistic: Maximum
+      Threshold: 5
