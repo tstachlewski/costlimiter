@@ -1,6 +1,6 @@
 ## Description
 
-CostLimiter is a solution which automatically stop different resources in AWS Account, when billing exceed specified value. This is a 1-click deployment - which simplify the whole solution. In addition to stopping resources it will also send an email message to the provided email address with information about the situation.
+CostLimiter is a solution which automatically stops different resources in AWS Account, when billing exceed specified value. This is a 1-click deployment - which simplify the whole solution. In addition to stopping resources it will also send an email message to the provided email address with information about the situation.
 
 What exactly the solution do?
 -	It stop all EC2 instances
