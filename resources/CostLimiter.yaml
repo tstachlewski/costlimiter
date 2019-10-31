@@ -117,4 +117,4 @@ Resources:
       Namespace: AWS/Billing
       Period: 21600
       Statistic: Maximum
-      Threshold: 5
+      Threshold: !Ref Budget
